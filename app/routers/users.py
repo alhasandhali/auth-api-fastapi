@@ -55,7 +55,12 @@ async def login(
 ) -> dict:
     """Authenticate a user and return a JWT access token."""
     user = await users_collection.find_one(
-        {"username": form_data.username}
+        {
+            "$or": [
+                {"username": form_data.username},
+                {"email": form_data.username}
+            ]
+        }
     )
 
     if not user:

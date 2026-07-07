@@ -4,7 +4,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordRequestForm
 
 from ..database import users_collection
-from ..schemas import UserCreate, Token
+from ..schemas import UserCreate, Token, UserUpdate
 from ..auth import hash_password, verify_password, create_access_token
 from ..deps import get_current_user, admin_required
 
@@ -91,7 +91,26 @@ async def profile(
     user: dict = Depends(get_current_user),
 ) -> dict:
     """Return the authenticated user's profile information."""
-    return user
+    db_user = await users_collection.find_one({"username": user["username"]}, {"_id": 0, "password": 0})
+    if not db_user:
+        raise HTTPException(status_code=404, detail="User not found")
+    return db_user
+
+@router.put("/profile")
+async def update_profile(
+    update_data: UserUpdate,
+    user: dict = Depends(get_current_user),
+) -> dict:
+    """Update user profile."""
+    update_dict = {k: v for k, v in update_data.model_dump().items() if v is not None}
+    if not update_dict:
+        return {"message": "No changes provided"}
+        
+    await users_collection.update_one(
+        {"username": user["username"]},
+        {"$set": update_dict}
+    )
+    return {"message": "Profile updated successfully"}
 
 
 @router.get("/admin")

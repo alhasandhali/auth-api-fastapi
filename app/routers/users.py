@@ -4,7 +4,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordRequestForm
 
 from ..database import users_collection
-from ..schemas import UserCreate, Token, UserUpdate
+from ..schemas import UserCreate, Token, UserUpdate, PasswordUpdate
 from ..auth import hash_password, verify_password, create_access_token
 from ..deps import get_current_user, admin_required
 
@@ -42,6 +42,7 @@ async def register(user: UserCreate) -> dict:
             "username": user.username,
             "email": user.email,
             "password": hash_password(user.password),
+            "full_name": user.full_name,
             "role": "user",
         }
     )
@@ -116,6 +117,40 @@ async def update_profile(
         {"$set": update_dict}
     )
     return {"message": "Profile updated successfully"}
+
+
+@router.put("/profile/password")
+async def update_password(
+    password_data: PasswordUpdate,
+    user: dict = Depends(get_current_user),
+) -> dict:
+    """Update user password."""
+    db_user = await users_collection.find_one({"username": user["username"]})
+    if not db_user:
+        raise HTTPException(status_code=404, detail="User not found")
+        
+    if not verify_password(password_data.current_password, db_user["password"]):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Incorrect current password",
+        )
+        
+    await users_collection.update_one(
+        {"username": user["username"]},
+        {"$set": {"password": hash_password(password_data.new_password)}}
+    )
+    return {"message": "Password updated successfully"}
+
+
+@router.delete("/profile")
+async def delete_profile(
+    user: dict = Depends(get_current_user),
+) -> dict:
+    """Delete user profile."""
+    result = await users_collection.delete_one({"username": user["username"]})
+    if result.deleted_count == 0:
+        raise HTTPException(status_code=404, detail="User not found")
+    return {"message": "Profile deleted successfully"}
 
 
 @router.get("/admin")
